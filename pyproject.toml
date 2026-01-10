@@ -44,9 +44,9 @@ viz = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/casey/websocket-fabric"
-Documentation = "https://github.com/casey/websocket-fabric/tree/main/agent-coordinator"
-Repository = "https://github.com/casey/websocket-fabric"
+Homepage = "https://github.com/SuperInstance/agent-coordinator"
+Documentation = "https://github.com/SuperInstance/agent-coordinator/tree/main/agent-coordinator"
+Repository = "https://github.com/SuperInstance/agent-coordinator"
 
 [tool.setuptools.packages.find]
 where = ["src"]
