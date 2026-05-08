@@ -1,320 +1,91 @@
 # Agent Coordinator
 
-> **Mission Control for Managing Teams of AI Agents**
+**Mission control for a fleet of AI agents. Assign, route, monitor, recover.**
 
-A comprehensive Python framework for coordinating multi-agent systems. Inspired by the "Pack Dashboard" concept from LucidDreamer UI, this system provides complete control over agent lifecycles, communication, task distribution, and monitoring.
+Multiple agents need to work together without stepping on each other. The Agent Coordinator manages their lifecycles — who's doing what, what they've learned, what's waiting, what failed and needs retry.
 
-## Overview
+This is the Python framework that runs the [Cocapn fleet](https://github.com/SuperInstance). Every agent has a role, every task has a queue, every message has a route.
 
-Agent Coordinator enables you to:
+---
 
-- **Manage Agent Packs**: Organize agents into teams (packs) with specialized roles
-- **Coordinate Tasks**: Distribute work across agents with intelligent load balancing
-- **Route Messages**: Facilitate communication between agents
-- **Monitor Health**: Track agent status, performance metrics, and system health
-- **Visualize Networks**: See agent relationships and communication patterns
-- **Handle Failures**: Automatic fault tolerance and recovery
+## What It Does
+
+**Organize agents into packs.** Each pack has a role and a set of capabilities. Agents come and go as the workload shifts.
+
+**Distribute tasks.** The coordinator knows which agents are available, which are busy, and which have the right skills. Work goes where it fits.
+
+**Route messages.** Agents don't talk to each other directly. They talk through the message bus. Topic-based routing, with subscriptions and acknowledgments.
+
+**Monitor health.** Every agent reports heartbeat, load, and completion status. The coordinator detects silence, re-queues lost work, and scales idle agents down.
+
+**Handle failures.** If an agent goes silent mid-task, the coordinator re-queues within the heartbeat timeout. No task is lost, no work is duplicated (at-most-once within the timeout window).
+
+---
 
 ## Architecture
 
 ```
 AgentCoordinator
-├── AgentRegistry    - Track all agents and their capabilities
-├── TaskQueue        - Distribute work to available agents
-├── MessageBus       - Inter-agent communication fabric
-├── NetworkMonitor   - Track agent health and connectivity
-└── MetricsCollector - Performance data and analytics
-```
-
-## Installation
-
-```bash
-# Basic installation
-pip install agent-coordinator
-
-# With visualization support
-pip install agent-coordinator[viz]
-
-# Development installation
-git clone https://github.com/casey/websocket-fabric.git
-cd websocket-fabric/agent-coordinator
-pip install -e ".[dev,viz]"
+├── AgentRegistry     — Every agent, its capabilities, its status
+├── TaskQueue         — Priority queue, bounded, with dead-letter
+├── MessageBus        — Topic-based pub/sub, at-least-once delivery
+├── NetworkMonitor    — Heartbeat, health, connectivity scoring
+└── MetricsCollector  — Throughput, latency, error rates
 ```
 
 ## Quick Start
 
 ```python
-import asyncio
-from agent_coordinator import AgentCoordinator, Agent, AgentRole, Task
+from agent_coordinator import AgentCoordinator, Agent, Task
 
-async def main():
-    # Create a coordinator
-    coordinator = AgentCoordinator(name="mission-control")
+coord = AgentCoordinator()
 
-    # Define agent roles
-    roles = [
-        AgentRole(name="leader", capabilities=["planning", "coordination"]),
-        AgentRole(name="worker", capabilities=["execution", "processing"]),
-        AgentRole(name="analyst", capabilities=["analysis", "reporting"]),
-    ]
+# Register a worker
+coord.register(Agent(
+    id="forge-1",
+    capabilities=["rust", "cuda", "proofs"],
+    max_concurrent=3
+))
 
-    # Register roles
-    for role in roles:
-        await coordinator.register_role(role)
+# Submit a task
+task_id = coord.submit(Task(
+    type="compile",
+    payload={"crate": "eisenstein", "target": "aarch64"},
+    priority=2
+))
 
-    # Spawn agents
-    leader = await coordinator.spawn_agent("alpha", role="leader")
-    workers = [await coordinator.spawn_agent(f"worker-{i}", role="worker") for i in range(3)]
-    analyst = await coordinator.spawn_agent("beta", role="analyst")
+# Route a message — topic-based
+coord.publish("fleet/compilation/complete", {
+    "agent": "forge-1",
+    "status": "ok",
+    "artifacts": ["eisenstein.aarch64"]
+})
 
-    # Submit a task
-    task = Task(
-        id="task-1",
-        description="Analyze data and generate report",
-        required_capabilities=["processing", "analysis"],
-        payload={"data": [1, 2, 3, 4, 5]}
-    )
-
-    result = await coordinator.submit_task(task)
-    print(f"Task result: {result}")
-
-    # Clean up
-    await coordinator.shutdown()
-
-asyncio.run(main())
+# Check health
+status = coord.health()
+# → {"forge-1": {"load": 2, "heartbeat_ok": True, "tasks_completed": 47}}
 ```
 
-## Example Scenarios
-
-### D&D Party Coordination
-
-```python
-from agent_coordinator import AgentCoordinator, AgentRole
-from examples.dnd_party import DNDPartyScenarios
-
-# Create a classic D&D adventuring party
-coordinator = AgentCoordinator(name="adventuring-party")
-
-roles = [
-    AgentRole(name="fighter", capabilities=["tank", "melee"], emoji="⚔️"),
-    AgentRole(name="cleric", capabilities=["heal", "support"], emoji="🙏"),
-    AgentRole(name="wizard", capabilities=["magic", "aoe"], emoji="🔮"),
-    AgentRole(name="rogue", capabilities=["stealth", "scout"], emoji="🗡️"),
-]
-
-# Spawn the party
-party = await DNDPartyScenarios.create_party(coordinator)
-
-# Encounter!
-await party.handle_encounter(goblins=5, boss=True)
-```
-
-### Customer Service Team
-
-```python
-from examples.customer_service import CustomerServiceTeam
-
-# Create a tiered support team
-team = CustomerServiceTeam()
-
-# Tier 1: Basic support
-await team.add_agent("tier1-1", tier=1, specialties=["general", "password-reset"])
-
-# Tier 2: Technical support
-await team.add_agent("tier2-1", tier=2, specialties=["technical", "billing"])
-
-# Tier 3: Escalations
-await team.add_agent("tier3-1", tier=3, specialties=["escalation", "management"])
-
-# Handle incoming tickets
-await team.handle_ticket(ticket_id=12345, category="billing", priority="high")
-```
-
-### Research Collaboration
-
-```python
-from examples.research_team import ResearchCollaboration
-
-# Create a multi-disciplinary research team
-research = ResearchCollaboration()
-
-# Add specialized researchers
-await research.add_researcher("data-scientist", field="ml")
-await research.add_researcher("domain-expert", field="biology")
-await research.add_researcher("analyst", field="statistics")
-
-# Run a study
-results = await research.run_study(
-    hypothesis="Gene X affects protein Y",
-    methodology="experimental"
-)
-```
-
-## Core Concepts
-
-### Agents
-
-Agents are the fundamental units of work. Each agent has:
-
-- **ID**: Unique identifier
-- **Role**: Defines capabilities and behaviors
-- **State**: Current status (idle, busy, offline, etc.)
-- **Capabilities**: What the agent can do
-- **Metrics**: Performance tracking data
-
-### Roles
-
-Roles define agent capabilities and behaviors:
-
-```python
-role = AgentRole(
-    name="data-processor",
-    capabilities=["parse", "transform", "validate"],
-    max_concurrent_tasks=3,
-    priority=10
-)
-```
-
-### Tasks
-
-Tasks represent units of work:
-
-```python
-task = Task(
-    id="unique-id",
-    description="Process dataset",
-    required_capabilities=["parse", "transform"],
-    payload={"dataset": "data.csv"},
-    timeout=300,
-    priority=5
-)
-```
-
-### Messages
-
-Agents communicate via messages:
-
-```python
-message = AgentMessage(
-    from_agent="agent-1",
-    to_agent="agent-2",
-    message_type="request",
-    content={"action": "help"},
-    correlation_id="msg-123"
-)
-```
-
-## Advanced Features
-
-### Fault Tolerance
-
-```python
-coordinator = AgentCoordinator(
-    name="resilient-system",
-    max_retries=3,
-    retry_delay=1.0,
-    heartbeat_interval=30
-)
-
-# Auto-recovery on agent failure
-await coordinator.enable_auto_recovery()
-```
-
-### Load Balancing
-
-```python
-# Strategies: round_robin, least_loaded, capability_match, random
-coordinator.set_load_balancing_strategy("least_loaded")
-```
-
-### Monitoring
-
-```python
-# Get system status
-status = await coordinator.get_status()
-
-# Get agent metrics
-metrics = await coordinator.get_agent_metrics("agent-1")
-
-# Get task history
-history = await coordinator.get_task_history(limit=100)
-```
-
-### Event Streaming
-
-```python
-async for event in coordinator.event_stream():
-    print(f"Event: {event.type} - {event.data}")
-```
-
-## API Reference
-
-### AgentCoordinator
-
-Main coordinator class for managing agents.
-
-#### Methods
-
-- `register_role(role: AgentRole)` - Register a new agent role
-- `spawn_agent(agent_id: str, role: str, **kwargs)` - Create a new agent
-- `terminate_agent(agent_id: str)` - Shut down an agent
-- `submit_task(task: Task)` - Submit work to be executed
-- `get_agent(agent_id: str)` - Get agent by ID
-- `get_agents_by_role(role: str)` - Get all agents with a role
-- `get_status()` - Get system status
-- `shutdown()` - Gracefully shutdown coordinator
-
-### Agent
-
-Represents a single agent.
-
-#### Properties
-
-- `id` - Unique identifier
-- `role` - Agent role
-- `state` - Current state
-- `capabilities` - List of capabilities
-- `metrics` - Performance metrics
-
-#### Methods
-
-- `execute(task: Task)` - Execute a task
-- `send_message(message: AgentMessage)` - Send a message
-- `get_status()` - Get agent status
-
-## Visualization
-
-Enable visualization to see agent networks:
-
-```python
-from agent_coordinator.visualization import NetworkVisualizer
-
-visualizer = NetworkVisualizer(coordinator)
-
-# Generate network graph
-visualizer.render_network(output="network.png")
-
-# Show metrics dashboard
-visualizer.show_dashboard()
-```
-
-## Testing
+## Installation
 
 ```bash
-# Run tests
-pytest
-
-# Run with coverage
-pytest --cov=agent_coordinator --cov-report=html
-
-# Run specific example scenarios
-pytest tests/test_scenarios.py::test_dnd_party
+pip install agent-coordinator
 ```
+
+---
+
+## How It Fits
+
+The Agent Coordinator is the mission control layer of the [SuperInstance](https://github.com/SuperInstance/superinstance) fleet:
+
+- **[cocapn](https://github.com/SuperInstance/cocapn)** — the helm, fleet-wide coordination
+- **[agent-coordinator](https://github.com/SuperInstance/agent-coordinator)** — this, the runtime task management
+- **[baton-skill](https://github.com/SuperInstance/baton-skill)** — generational handoff between agents
+- **[arena-combat-analyst-1](https://github.com/SuperInstance/arena-combat-analyst-1)** — self-play skill acquisition
+- **[casting-call](https://github.com/SuperInstance/casting-call)** — which model plays which role
+
+---
 
 ## License
 
-MIT License - see LICENSE file for details.
-
-## Contributing
-
-Contributions welcome! Please see CONTRIBUTING.md for guidelines.
+MIT
