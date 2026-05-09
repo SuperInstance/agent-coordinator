@@ -1,5 +1,15 @@
 # Agent Coordinator
 
+
+## Meta
+
+**Domain:** ai-agents
+**Depends on:** —
+**Depended by:** —
+**Implements:** Multi-agent coordination framework for managing teams of AI agents with task dis...
+**Related:** —
+
+
 **Mission control for a fleet of AI agents. Assign, route, monitor, recover.**
 
 Multiple agents need to work together without stepping on each other. The Agent Coordinator manages their lifecycles — who's doing what, what they've learned, what's waiting, what failed and needs retry.
